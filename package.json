@@ -1,0 +1,15 @@
+{
+  "name": "phone-music",
+  "version": "0.1.0",
+  "description": "让你的 AI 在跟你打电话的时候放歌:MCP 工具 + 指令通道 + 网页/iOS 播放端(会压低、听得懂「停/暂停/继续」)",
+  "license": "MIT",
+  "main": "server/index.js",
+  "bin": { "phone-music": "server/index.js", "phone-music-mcp": "server/mcp.js" },
+  "scripts": {
+    "start": "node server/index.js",
+    "mcp": "node server/mcp.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18.17" },
+  "files": ["server", "web", "ios", "tools", "prompts", "docs", "README.md", "README.en.md", "LICENSE"]
+}

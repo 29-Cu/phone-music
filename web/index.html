@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>phone-music</title>
+<style>
+  :root { --bg:#fff; --fg:#111; --mute:#777; --line:#ddd; --soft:#f4f4f4; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111; --fg:#eee; --mute:#888; --line:#333; --soft:#1b1b1b; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:18px; font-weight:600; margin:0 0 16px; letter-spacing:.02em; }
+  nav { display:flex; gap:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:18px; }
+  nav button { flex:1; border:0; border-radius:0; background:none; padding:9px 0; }
+  nav button + button { border-left:1px solid var(--line); }
+  nav button.on { background:var(--fg); color:var(--bg); }
+  section { border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
+  h2 { font-size:13px; font-weight:600; color:var(--mute); margin:0 0 10px; display:flex; align-items:center; gap:6px; }
+  .q { display:inline-flex; width:16px; height:16px; border:1px solid var(--line); border-radius:50%; font-size:11px; align-items:center; justify-content:center; cursor:pointer; color:var(--mute); }
+  .tip { font-size:13px; color:var(--mute); margin:8px 0 0; }
+  button { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer; }
+  button.main { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+  button:disabled { opacity:.4; cursor:default; }
+  input, select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:7px 9px; min-width:0; }
+  input.small { width:72px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .row + .row { margin-top:8px; }
+  .grow { flex:1; }
+  .now { display:flex; align-items:center; gap:12px; }
+  .now .t { font-weight:600; }
+  .now .a { color:var(--mute); font-size:13px; }
+  .bar { height:2px; background:var(--line); margin:10px 0 4px; position:relative; }
+  .bar i { position:absolute; left:0; top:0; bottom:0; background:var(--fg); width:0; transition:width .1s linear; }
+  .mono { font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; background:var(--soft); border-radius:6px; padding:10px; margin:10px 0 0; min-height:20px; }
+  .hold.on { background:var(--fg); color:var(--bg); }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--line); }
+  li:first-child { border-top:0; }
+  li .t { cursor:text; }
+  li .m { font-size:12px; color:var(--mute); }
+  .hide { display:none !important; }
+  label.ck { display:inline-flex; align-items:center; gap:4px; font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>phone-music</h1>
+
+  <section id="login" class="hide">
+    <h2>访问口令 <span class="q" title="服务器第一次启动时生成的,在 data/token.txt 里">?</span></h2>
+    <div class="row"><input id="tok" class="grow" type="password" placeholder="粘贴口令"><button class="main" id="tokGo">进入</button></div>
+  </section>
+
+  <div id="app" class="hide">
+    <nav><button class="on" data-tab="try">试一试</button><button data-tab="lib">曲库</button></nav>
+
+    <div id="tab-try">
+      <section>
+        <h2>一通假电话 <span class="q" title="用这个页面当「手机上的播放端」。接通以后,下面替 AI 调工具,这里就会放出来">?</span></h2>
+        <div class="row"><button class="main" id="dial">接通</button><span class="tip" id="callTip" style="margin:0"></span></div>
+        <div id="nowBox" class="hide">
+          <div class="bar"><i id="lvl"></i></div>
+          <div class="now">
+            <div class="grow"><div class="t" id="nowT"></div><div class="a" id="nowA"></div></div>
+            <button id="bPause">暂停</button><button id="bStop">停</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="sim" class="hide">
+        <h2>假装在说话 <span class="q" title="按住不放 = 正在说话。AI 说话时歌压到三成,你说话时压到两成">?</span></h2>
+        <div class="row"><button class="hold" id="hAi">按住:AI 在说话</button><button class="hold" id="hMe">按住:我在说话</button></div>
+        <div class="row"><input id="said" class="grow" placeholder="我说了一句(试试:暂停 / 继续 / 停)"><button id="saidGo">说</button></div>
+        <p class="tip" id="saidTip"></p>
+      </section>
+
+      <section>
+        <h2>替 AI 调工具 <span class="q" title="这里发出去的,和 AI 真调 phone_music 一模一样;下面的回话就是 AI 会看到的">?</span></h2>
+        <div class="row">
+          <select id="act"></select>
+          <input id="trk" class="grow" placeholder="track">
+        </div>
+        <div class="row">
+          <label class="ck"><input type="checkbox" id="loop">循环</label>
+          <input id="sec" class="small" type="number" min="1" placeholder="秒">
+          <input id="pl" class="grow" placeholder="playlist(歌单名)">
+          <button class="main" id="go">调用</button>
+        </div>
+        <div class="mono" id="out"></div>
+        <h2 style="margin-top:14px">AI 每一轮能看到的那句 <span class="q" title="GET /api/music/fact。接进你自己的 AI 时,每一轮把这句塞进上下文,它就知道歌还在不在放">?</span></h2>
+        <div class="mono" id="fact"></div>
+      </section>
+    </div>
+
+    <div id="tab-lib" class="hide">
+      <section>
+        <h2>传歌 <span class="q" title="mp3 / m4a 原样收,别的格式会转成 mp3。同一首传两次不会重复存">?</span></h2>
+        <div class="row"><input id="files" type="file" accept="audio/*" multiple class="grow"><button class="main" id="up">上传</button></div>
+        <p class="tip" id="upTip"></p>
+      </section>
+      <section>
+        <h2>曲库 <span class="q" title="点歌名可以改名。AI 只能删它自己放进来的,你什么都能删">?</span></h2>
+        <ul id="list"></ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="/phone-music-player.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var token = localStorage.getItem("pm_t") || new URLSearchParams(location.search).get("t") || "";
+  var userWord = "TA";
+  var pm = null, factT = 0;
+
+  function api(method, path, body, raw) {
+    var h = { Authorization: "Bearer " + token };
+    if (body && !raw) h["Content-Type"] = "application/json";
+    return fetch(path, { method: method, headers: h, body: raw ? body : body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ("HTTP " + r.status)); return j; }); });
+  }
+  function mmss(s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+  // ── 口令 ──
+  function enter() {
+    api("GET", "/api/library").then(function (j) {
+      localStorage.setItem("pm_t", token);
+      document.cookie = "pm_t=" + encodeURIComponent(token) + "; path=/; SameSite=Strict";
+      userWord = j.user_word || "TA";
+      $("login").classList.add("hide"); $("app").classList.remove("hide");
+      renderLib(j.tracks);
+      loadTool();
+    }).catch(function () { $("login").classList.remove("hide"); $("app").classList.add("hide"); });
+  }
+  $("tokGo").onclick = function () { token = $("tok").value.trim(); enter(); };
+  enter();
+
+  // ── 标签页 ──
+  document.querySelectorAll("nav button").forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll("nav button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      $("tab-try").classList.toggle("hide", b.dataset.tab !== "try");
+      $("tab-lib").classList.toggle("hide", b.dataset.tab !== "lib");
+      if (b.dataset.tab === "lib") api("GET", "/api/library").then(function (j) { renderLib(j.tracks); });
+    };
+  });
+
+  // ── 假电话 ──
+  function paint(s) {
+    var show = s.state !== "idle";
+    $("nowBox").classList.toggle("hide", !show);
+    $("nowT").textContent = s.title || s.listTitle || "";
+    $("nowA").textContent = [s.state === "paused" ? "暂停中" : "", s.artist || "", s.count > 1 ? (s.index % s.count + 1) + "/" + s.count : ""].filter(Boolean).join(" · ");
+    $("bPause").textContent = s.state === "paused" ? "继续" : "暂停";
+  }
+  setInterval(function () { if (pm) { var s = pm.snapshot(); $("lvl").style.width = Math.round(s.level * 100) + "%"; paint(s); } }, 150);
+
+  $("dial").onclick = function () {
+    if (pm) {
+      pm.end(); pm = null; clearInterval(factT);
+      $("dial").textContent = "接通"; $("callTip").textContent = ""; $("sim").classList.add("hide"); $("nowBox").classList.add("hide");
+      refreshFact();
+      return;
+    }
+    pm = PhoneMusic.create({ token: token, onChange: paint, onNote: function (m) { $("callTip").textContent = m; } });
+    pm.unlock(); pm.start();
+    $("dial").textContent = "挂断"; $("callTip").textContent = "通话中";
+    $("sim").classList.remove("hide");
+    refreshFact(); factT = setInterval(refreshFact, 3000);
+  };
+  $("bPause").onclick = function () { if (!pm) return; pm.snapshot().state === "paused" ? pm.resume() : pm.pause(); };
+  $("bStop").onclick = function () { if (pm) pm.stop(); };
+
+  function holdBtn(b, fn) {
+    var down = function (e) { e.preventDefault(); b.classList.add("on"); fn(true); };
+    var up = function () { b.classList.remove("on"); fn(false); };
+    b.addEventListener("pointerdown", down); b.addEventListener("pointerup", up); b.addEventListener("pointerleave", up); b.addEventListener("pointercancel", up);
+  }
+  holdBtn($("hAi"), function (v) { if (pm) pm.setAiSpeaking(v); });
+  holdBtn($("hMe"), function (v) { if (pm) pm.setUserSpeaking(v); });
+  $("saidGo").onclick = function () {
+    if (!pm) return;
+    var t = $("said").value;
+    // 真电话里:她开口(VAD)→ 识别出字 → 交给 userSaid。这里一下子模拟完这三步
+    pm.setUserSpeaking(true);
+    setTimeout(function () {
+      pm.setUserSpeaking(false);
+      var r = pm.userSaid(t);
+      $("saidTip").textContent = r === "stop" ? "听成了「停」" : r === "pause" ? "听成了「暂停」:你下回开口说完、两边静下来 1.5 秒,就从这儿接着放" : r === "resume" ? "听成了「继续」" : "不是放歌的口令,这句会照常交给 AI";
+    }, 600);
+  };
+  $("said").addEventListener("keydown", function (e) { if (e.key === "Enter") $("saidGo").onclick(); });
+
+  // ── 替 AI 调工具 ──
+  function loadTool() {
+    api("GET", "/api/tool").then(function (d) {
+      var acts = (d.input_schema.properties.action || {}).enum || [];
+      $("act").innerHTML = acts.map(function (a) { return "<option>" + a + "</option>"; }).join("");
+      $("out").textContent = d.description;
+    });
+  }
+  $("go").onclick = function () {
+    var body = { action: $("act").value };
+    if ($("trk").value.trim()) body.track = $("trk").value.trim();
+    if ($("pl").value.trim()) body.playlist = $("pl").value.trim();
+    if ($("loop").checked) body.loop = true;
+    if (Number($("sec").value) > 0) body.seconds = Math.round(Number($("sec").value));
+    $("out").textContent = "…";
+    api("POST", "/api/tool", body).then(function (j) { $("out").textContent = j.text; refreshFact(); })
+      .catch(function (e) { $("out").textContent = "出错:" + e.message; });
+  };
+  function refreshFact() {
+    api("GET", "/api/music/fact" + (pm ? "?call_id=" + encodeURIComponent(pm.callId) : "")).then(function (j) { $("fact").textContent = j.text; }).catch(function () {});
+  }
+
+  // ── 曲库 ──
+  function renderLib(tracks) {
+    var ul = $("list");
+    ul.innerHTML = "";
+    if (!tracks.length) { ul.innerHTML = "<li class='m'>还是空的</li>"; return; }
+    tracks.forEach(function (t) {
+      var li = document.createElement("li");
+      var box = document.createElement("div"); box.className = "grow";
+      var tt = document.createElement("div"); tt.className = "t"; tt.textContent = t.title; tt.title = "点一下改名";
+      var mm = document.createElement("div"); mm.className = "m";
+      mm.textContent = mmss(t.duration) + " · " + (t.added_by === "ai" ? "AI 放的" : userWord + "放的") + (t.license ? " · " + t.license : "");
+      box.appendChild(tt); box.appendChild(mm);
+      var del = document.createElement("button"); del.textContent = "删";
+      tt.onclick = function () {
+        var n = prompt("改个名字", t.title);
+        if (!n || n === t.title) return;
+        api("POST", "/api/library/" + t.id, { title: n }).then(function (j) { t.title = j.track.title; tt.textContent = t.title; }).catch(function (e) { alert(e.message); });
+      };
+      del.onclick = function () {
+        if (!confirm("删掉「" + t.title + "」?")) return;
+        api("DELETE", "/api/library/" + t.id).then(function () { li.remove(); }).catch(function (e) { alert(e.message); });
+      };
+      li.appendChild(box); li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+  $("up").onclick = function () {
+    var fs = Array.prototype.slice.call($("files").files || []);
+    if (!fs.length) return;
+    var done = 0, tip = $("upTip");
+    $("up").disabled = true;
+    (function one() {
+      if (!fs.length) {
+        $("up").disabled = false; tip.textContent = "传好了 " + done + " 首"; $("files").value = "";
+        return api("GET", "/api/library").then(function (j) { renderLib(j.tracks); });
+      }
+      var f = fs.shift();
+      tip.textContent = "在传 " + f.name + " …";
+      api("POST", "/api/library/upload?name=" + encodeURIComponent(f.name), f, true)
+        .then(function (j) { done++; if (j.dup) tip.textContent = f.name + " 曲库里已经有了"; })
+        .catch(function (e) { alert(f.name + ":" + e.message); })
+        .then(one);
+    })();
+  };
+})();
+</script>
+</body>
+</html>
